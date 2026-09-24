@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swarm Robotics RL: Collective Mapping & Hazard Detection</title>
+  <style>
+    :root {
+      --bg-primary: #0f131a;
+      --bg-panel: #181e29;
+      --bg-card: #202836;
+      --border-color: #2b3648;
+      --accent-blue: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header h1 span.badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Simulation Canvas Area */
+    .sim-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: radial-gradient(circle at center, #141a24 0%, #0d1117 100%);
+      position: relative;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
+    }
+
+    canvas {
+      display: block;
+      background: #000;
+    }
+
+    /* Control & Telemetry Sidebar */
+    .sidebar {
+      width: 380px;
+      background: var(--bg-panel);
+      border-left: 1px solid var(--border-color);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .panel-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .panel-card h3 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .metric-box {
+      background: rgba(15, 19, 26, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .metric-val {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent-blue);
+      margin-top: 2px;
+    }
+
+    .metric-val.green { color: var(--accent-green); }
+    .metric-val.amber { color: var(--accent-amber); }
+    .metric-val.red { color: var(--accent-red); }
+
+    .metric-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* Progress bar */
+    .progress-bar-container {
+      margin-top: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+      width: 0%;
+      transition: width 0.15s ease;
+    }
+
+    /* Controls */
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+    }
+
+    select, input[type="range"] {
+      background: #0f131a;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      outline: none;
+    }
+
+    select:focus { border-color: var(--accent-blue); }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: var(--text-main);
+      background: #283244;
+    }
+
+    button:hover { background: #334057; }
+
+    button.primary {
+      background: var(--accent-blue);
+      color: #0b1017;
+      border-color: transparent;
+    }
+    button.primary:hover { background: #7dd3fc; }
+
+    button.danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    button.danger:hover { background: rgba(239, 68, 68, 0.3); }
+
+    /* Legend */
+    .legend-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 0.75rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* Algorithm description tooltip */
+    .algo-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px;
+      border-radius: 6px;
+      border-left: 3px solid var(--accent-blue);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>
+      <span>🤖 Swarm Robotics Multi-Agent RL</span>
+      <span class="badge">Collective Mapping & Hazard Detection</span>
+    </h1>
+    <div style="font-size: 0.8rem; color: var(--text-muted);">
+      Dec-POMDP • Multi-Robot Coordination • Safety Buffer
+    </div>
+  </header>
+
+  <div class="main-container">
+    <!-- Viewport -->
+    <div class="sim-viewport">
+      <div class="canvas-wrapper">
+        <canvas id="simCanvas" width="600" height="600"></canvas>
+      </div>
+      <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-muted);">
+        Interactive RL Environment • Real-time Fog-of-War clearing & Hazard localization
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      
+      <!-- Telemetry Card -->
+      <div class="panel-card">
+        <h3>Live Swarm Telemetry</h3>
+        <div class="metrics-grid">
+          <div class="metric-box">
+            <div class="metric-label">Map Explored</div>
+            <div class="metric-val green" id="metricCoverage">0%</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Hazards Found</div>
+            <div class="metric-val amber" id="metricHazards">0 / 0</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Steps Taken</div>
+            <div class="metric-val" id="metricSteps">0</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-label">Hazard Hits</div>
+            <div class="metric-val red" id="metricHits">0</div>
+          </div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </div>
+
+      <!-- Algorithm & Settings -->
+      <div class="panel-card">
+        <h3>RL Algorithm Configuration</h3>
+        <div class="control-group">
+          <div class="control-row">
+            <label for="algoSelect">Algorithm:</label>
+            <select id="algoSelect">
+              <option value="cooperative" selected>Cooperative Shared Q</option>
+              <option value="sarsa">SARSA (Risk-Aware)</option>
+              <option value="q_learning">Independent Q-Learning</option>
+              <option value="random">Random Walk (Baseline)</option>
+            </select>
+          </div>
+
+          <div class="algo-desc" id="algoDesc">
+            <strong>Cooperative Q:</strong> Robots update a shared occupancy map and synchronize collective Q-values, achieving rapid distributed frontier exploration.
+          </div>
+
+          <div class="control-row">
+            <label for="swarmSize">Swarm Robots:</label>
+            <span id="swarmSizeVal">4</span>
+            <input type="range" id="swarmSize" min="1" max="8" value="4">
+          </div>
+
+          <div class="control-row">
+            <label for="simSpeed">Speed:</label>
+            <span id="simSpeedVal">2x</span>
+            <input type="range" id="simSpeed" min="1" max="5" value="2">
+          </div>
+
+          <div class="control-row">
+            <label for="toggleFog">Show Fog of War:</label>
+            <input type="checkbox" id="toggleFog" checked>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="btnPlayPause" class="primary">▶ Start Swarm</button>
+          <button id="btnStep">⏭ Step</button>
+        </div>
+        <div class="btn-row">
+          <button id="btnReset" class="danger">🔄 Reset Episode</button>
+          <button id="btnNewMap">🎲 New Grid</button>
+        </div>
+      </div>
+
+      <!-- Environment Legend -->
+      <div class="panel-card">
+        <h3>Map Legend</h3>
+        <div class="legend-grid">
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #111622; border: 1px solid #334155;"></div>
+            <span>Fog of War</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #e2e8f0;"></div>
+            <span>Explored Free Space</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #334155;"></div>
+            <span>Obstacle Wall</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #f59e0b;"></div>
+            <span>Detected Hazard ⚠️</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #ef4444;"></div>
+            <span>True Hazard ☣</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: #38bdf8; border-radius: 50%;"></div>
+            <span>Swarm Robot</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- Grid & Swarm Simulation in Pure JavaScript ---
+    const GRID_SIZE = 20;
+    const ROBOT_COLORS = ["#38bdf8", "#22c55e", "#a855f7", "#f97316", "#eab308", "#ec4899", "#14b8a6", "#6366f1"];
+    
+    // Cell constants
+    const C_FREE = 0, C_WALL = 1, C_HAZARD = 2;
+    const M_UNEXPLORED = -1, M_FREE = 0, M_WALL = 1, M_HAZARD = 2;
+
+    class SwarmSimulatorJS {
+      constructor(size = 20, numRobots = 4) {
+        this.size = size;
+        this.numRobots = numRobots;
+        this.sensorRange = 2;
+        this.groundTruth = [];
+        this.exploredMap = [];
+        this.robots = [];
+        this.hazards = [];
+        this.discoveredHazards = new Set();
+        this.steps = 0;
+        this.totalHazardHits = 0;
+        this.navigableCount = 0;
+        
+        // Tabular Q-table [320 states x 5 actions]
+        this.qTable = Array.from({length: 320}, () => Array(5).fill(0.0));
+        this.epsilon = 0.1;
+        
+        this.generateMap();
+      }
+
+      generateMap() {
+        this.groundTruth = Array.from({length: this.size}, () => Array(this.size).fill(C_FREE));
+        this.exploredMap = Array.from({length: this.size}, () => Array(this.size).fill(M_UNEXPLORED));
+        this.hazards = [];
+        this.discoveredHazards.clear();
+        this.steps = 0;
+        this.totalHazardHits = 0;
+
+        // Boundaries
+        for (let i = 0; i < this.size; i++) {
+          this.groundTruth[0][i] = C_WALL;
+          this.groundTruth[this.size - 1][i] = C_WALL;
+          this.groundTruth[i][0] = C_WALL;
+          this.groundTruth[i][this.size - 1] = C_WALL;
+        }
+
+        // Interior random obstacles
+        const numObstacles = Math.floor(0.12 * (this.size - 2) * (this.size - 2));
+        for (let i = 0; i < numObstacles; i++) {
+          const rx = 1 + Math.floor(Math.random() * (this.size - 2));
+          const ry = 1 + Math.floor(Math.random() * (this.size - 2));
+          this.groundTruth[ry][rx] = C_WALL;
+        }
+
+        // Hazards (danger zones)
+        const numHazards = 8;
+        let placed = 0;
+        while (placed < numHazards) {
+          const hx = 2 + Math.floor(Math.random() * (this.size - 4));
+          const hy = 2 + Math.floor(Math.random() * (this.size - 4));
+          if (this.groundTruth[hy][hx] === C_FREE) {
+            this.groundTruth[hy][hx] = C_HAZARD;
+            this.hazards.push({x: hx, y: hy});
+            placed++;
+          }
+        }
+
+        // Count navigable
+        this.navigableCount = 0;
+        for (let y = 0; y < this.size; y++) {
+          for (let x = 0; x < this.size; x++) {
+            if (this.groundTruth[y][x] !== C_WALL) this.navigableCount++;
+          }
+        }
+
+        this.spawnRobots();
+      }
+
+      spawnRobots() {
+        this.robots = [];
+        this.exploredMap = Array.from({length: this.size}, () => Array(this.size).fill(M_UNEXPLORED));
+        this.discoveredHazards.clear();
+        this.steps = 0;
+        this.totalHazardHits = 0;
+
+        for (let i = 0; i < this.numRobots; i++) {
+          let sx = 1 + (i % 3), sy = 1 + Math.floor(i / 3);
+          while (this.groundTruth[sy][sx] === C_WALL) {
+            sx = 1 + Math.floor(Math.random() * 4);
+            sy = 1 + Math.floor(Math.random() * 4);
+          }
+          this.robots.push({
+            id: i,
+            x: sx,
+            y: sy,
+            trail: [{x: sx, y: sy}],
+            color: ROBOT_COLORS[i % ROBOT_COLORS.length]
+          });
+        }
+        this.updateSensors();
+      }
+
+      updateSensors() {
+        this.robots.forEach(r => {
+          for (let dy = -this.sensorRange; dy <= this.sensorRange; dy++) {
+            for (let dx = -this.sensorRange; dx <= this.sensorRange; dx++) {
+              if (dx * dx + dy * dy <= this.sensorRange * this.sensorRange + 0.5) {
+                const nx = r.x + dx, ny = r.y + dy;
+                if (nx >= 0 && nx < this.size && ny >= 0 && ny < this.size) {
+                  const trueVal = this.groundTruth[ny][nx];
+                  this.exploredMap[ny][nx] = trueVal;
+                  if (trueVal === C_HAZARD) {
+                    this.discoveredHazards.add(`${nx},${ny}`);
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      getCompactState(robot) {
+        // Frontier direction
+        const counts = [0, 0, 0, 0]; // N, E, S, W
+        const R = this.sensorRange * 3;
+        for (let dy = -R; dy <= R; dy++) {
+          for (let dx = -R; dx <= R; dx++) {
+            const qx = robot.x + dx, qy = robot.y + dy;
+            if (qx >= 0 && qx < this.size && qy >= 0 && qy < this.size) {
+              if (this.exploredMap[qy][qx] === M_UNEXPLORED) {
+                if (dy < 0 && Math.abs(dy) >= Math.abs(dx)) counts[0]++;
+                else if (dx > 0 && Math.abs(dx) >= Math.abs(dy)) counts[1]++;
+                else if (dy > 0 && Math.abs(dy) >= Math.abs(dx)) counts[2]++;
+                else if (dx < 0 && Math.abs(dx) >= Math.abs(dy)) counts[3]++;
+              }
+            }
+          }
+        }
+        let maxCount = Math.max(...counts);
+        let frontierDir = maxCount === 0 ? 4 : counts.indexOf(maxCount);
+
+        // Obstacle bits (N, E, S, W)
+        let obstacleBits = 0;
+        const adj = [{x: 0, y: -1}, {x: 1, y: 0}, {x: 0, y: 1}, {x: -1, y: 0}];
+        adj.forEach((d, bit) => {
+          const ax = robot.x + d.x, ay = robot.y + d.y;
+          if (ax < 0 || ax >= this.size || ay < 0 || ay >= this.size || this.groundTruth[ay][ax] === C_WALL) {
+            obstacleBits |= (1 << bit);
+          }
+        });
+
+        // Hazard nearby
+        let hazardNear = 0;
+        for (let dy = -this.sensorRange; dy <= this.sensorRange; dy++) {
+          for (let dx = -this.sensorRange; dx <= this.sensorRange; dx++) {
+            const hx = robot.x + dx, hy = robot.y + dy;
+            if (hx >= 0 && hx < this.size && hy >= 0 && hy < this.size && this.groundTruth[hy][hx] === C_HAZARD) {
+              hazardNear = 1;
+              break;
+            }
+          }
+          if (hazardNear) break;
+        }
+
+        // Neighbor nearby
+        let neighborNear = 0;
+        for (let other of this.robots) {
+          if (other.id !== robot.id) {
+            if (Math.abs(robot.x - other.x) + Math.abs(robot.y - other.y) <= 2) {
+              neighborNear = 1;
+              break;
+            }
+          }
+        }
+
+        return frontierDir * 64 + obstacleBits * 4 + hazardNear * 2 + neighborNear;
+      }
+
+      selectAction(robot, algo) {
+        if (algo === "random") {
+          return Math.floor(Math.random() * 5);
+        }
+        const s = this.getCompactState(robot);
+        const qVals = this.qTable[s];
+
+        // Epsilon-greedy
+        if (Math.random() < this.epsilon) {
+          return Math.floor(Math.random() * 5);
+        }
+
+        // For SARSA, add slight risk penalty to actions pointing toward known hazards
+        if (algo === "sarsa") {
+          const moves = [{x:0, y:-1}, {x:1, y:0}, {x:0, y:1}, {x:-1, y:0}, {x:0, y:0}];
+          let bestA = 0, bestScore = -Infinity;
+          for (let a = 0; a < 5; a++) {
+            let score = qVals[a];
+            const tx = robot.x + moves[a].x, ty = robot.y + moves[a].y;
+            if (tx >= 0 && tx < this.size && ty >= 0 && ty < this.size && this.exploredMap[ty][tx] === M_HAZARD) {
+              score -= 15.0; // Learned safety buffer
+            }
+            if (score > bestScore) {
+              bestScore = score;
+              bestA = a;
+            }
+          }
+          return bestA;
+        }
+
+        // Default Q-greedy
+        let maxVal = -Infinity;
+        let bestActions = [];
+        for (let a = 0; a < 5; a++) {
+          if (qVals[a] > maxVal) {
+            maxVal = qVals[a];
+            bestActions = [a];
+          } else if (qVals[a] === maxVal) {
+            bestActions.push(a);
+          }
+        }
+        return bestActions[Math.floor(Math.random() * bestActions.length)];
+      }
+
+      step(algo = "cooperative") {
+        this.steps++;
+        const moves = [{x:0, y:-1}, {x:1, y:0}, {x:0, y:1}, {x:-1, y:0}, {x:0, y:0}];
+
+        this.robots.forEach(r => {
+          const s = this.getCompactState(r);
+          const act = this.selectAction(r, algo);
+          const targetX = r.x + moves[act].x;
+          const targetY = r.y + moves[act].y;
+
+          let reward = -0.1;
+
+          // Wall collision
+          if (targetX < 0 || targetX >= this.size || targetY < 0 || targetY >= this.size || this.groundTruth[targetY][targetX] === C_WALL) {
+            reward -= 5.0;
+          } else {
+            // Valid move
+            r.x = targetX;
+            r.y = targetY;
+            r.trail.push({x: r.x, y: r.y});
+            if (r.trail.length > 25) r.trail.shift();
+
+            // Hazard collision
+            if (this.groundTruth[r.y][r.x] === C_HAZARD) {
+              reward -= 20.0;
+              this.totalHazardHits++;
+            }
+          }
+
+          // Q update
+          const nextS = this.getCompactState(r);
+          const maxNextQ = Math.max(...this.qTable[nextS]);
+          const currentQ = this.qTable[s][act];
+          this.qTable[s][act] += 0.2 * (reward + 0.95 * maxNextQ - currentQ);
+        });
+
+        this.updateSensors();
+      }
+
+      getCoveragePct() {
+        let exploredCount = 0;
+        for (let y = 0; y < this.size; y++) {
+          for (let x = 0; x < this.size; x++) {
+            if (this.exploredMap[y][x] !== M_UNEXPLORED && this.groundTruth[y][x] !== C_WALL) {
+              exploredCount++;
+            }
+          }
+        }
+        return ((exploredCount / Math.max(1, this.navigableCount)) * 100).toFixed(1);
+      }
+    }
+
+    // --- UI & Rendering Loop ---
+    const canvas = document.getElementById("simCanvas");
+    const ctx = canvas.getContext("2d");
+    const CELL_PIXELS = canvas.width / GRID_SIZE;
+
+    let sim = new SwarmSimulatorJS(GRID_SIZE, 4);
+    let isRunning = false;
+    let animId = null;
+    let speed = 2;
+
+    const metricCoverage = document.getElementById("metricCoverage");
+    const metricHazards = document.getElementById("metricHazards");
+    const metricSteps = document.getElementById("metricSteps");
+    const metricHits = document.getElementById("metricHits");
+    const progressBar = document.getElementById("progressBar");
+    const algoSelect = document.getElementById("algoSelect");
+    const algoDesc = document.getElementById("algoDesc");
+    const swarmSize = document.getElementById("swarmSize");
+    const swarmSizeVal = document.getElementById("swarmSizeVal");
+    const simSpeed = document.getElementById("simSpeed");
+    const simSpeedVal = document.getElementById("simSpeedVal");
+    const toggleFog = document.getElementById("toggleFog");
+    const btnPlayPause = document.getElementById("btnPlayPause");
+    const btnStep = document.getElementById("btnStep");
+    const btnReset = document.getElementById("btnReset");
+    const btnNewMap = document.getElementById("btnNewMap");
+
+    const ALGO_DESCS = {
+      cooperative: "<strong>Cooperative Q:</strong> Robots update a shared occupancy map and synchronize collective Q-values, achieving rapid distributed frontier exploration.",
+      sarsa: "<strong>SARSA (Risk-Aware):</strong> On-policy learning accounts for exploration errors, proactively forming a safe buffer around hazardous zones.",
+      q_learning: "<strong>Independent Q-Learning:</strong> Off-policy agents assume optimal actions, learning aggressive paths toward unexplored frontiers.",
+      random: "<strong>Random Walk (Baseline):</strong> Stochastic movement without reinforcement learning, used to illustrate efficiency gains of RL."
+    };
+
+    algoSelect.addEventListener("change", (e) => {
+      algoDesc.innerHTML = ALGO_DESCS[e.target.value] || "";
+    });
+
+    swarmSize.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value);
+      swarmSizeVal.innerText = val;
+      sim.numRobots = val;
+      sim.spawnRobots();
+      draw();
+    });
+
+    simSpeed.addEventListener("input", (e) => {
+      speed = parseInt(e.target.value);
+      simSpeedVal.innerText = speed + "x";
+    });
+
+    btnPlayPause.addEventListener("click", () => {
+      isRunning = !isRunning;
+      btnPlayPause.innerText = isRunning ? "⏸ Pause" : "▶ Start Swarm";
+      btnPlayPause.className = isRunning ? "" : "primary";
+    });
+
+    btnStep.addEventListener("click", () => {
+      sim.step(algoSelect.value);
+      draw();
+    });
+
+    btnReset.addEventListener("click", () => {
+      sim.spawnRobots();
+      draw();
+    });
+
+    btnNewMap.addEventListener("click", () => {
+      sim.generateMap();
+      draw();
+    });
+
+    function updateHUD() {
+      const cov = sim.getCoveragePct();
+      metricCoverage.innerText = cov + "%";
+      progressBar.style.width = cov + "%";
+      metricHazards.innerText = `${sim.discoveredHazards.size} / ${sim.hazards.length}`;
+      metricSteps.innerText = sim.steps;
+      metricHits.innerText = sim.totalHazardHits;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const showFog = toggleFog.checked;
+
+      // Draw Grid cells
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const px = x * CELL_PIXELS, py = y * CELL_PIXELS;
+          const explored = sim.exploredMap[y][x];
+          const ground = sim.groundTruth[y][x];
+
+          if (showFog && explored === M_UNEXPLORED) {
+            // Fog of war
+            ctx.fillStyle = "#111622";
+            ctx.fillRect(px, py, CELL_PIXELS, CELL_PIXELS);
+            ctx.strokeStyle = "#1b2230";
+            ctx.strokeRect(px, py, CELL_PIXELS, CELL_PIXELS);
+          } else {
+            // Explored or Fog disabled
+            const cellType = showFog ? explored : ground;
+            if (cellType === C_WALL) {
+              ctx.fillStyle = "#334155";
+              ctx.fillRect(px, py, CELL_PIXELS, CELL_PIXELS);
+              ctx.strokeStyle = "#1e293b";
+              ctx.strokeRect(px, py, CELL_PIXELS, CELL_PIXELS);
+            } else if (cellType === C_HAZARD) {
+              ctx.fillStyle = "#ef4444";
+              ctx.fillRect(px, py, CELL_PIXELS, CELL_PIXELS);
+              ctx.fillStyle = "#ffffff";
+              ctx.font = "14px sans-serif";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText("☣", px + CELL_PIXELS / 2, py + CELL_PIXELS / 2);
+            } else {
+              ctx.fillStyle = "#e2e8f0";
+              ctx.fillRect(px, py, CELL_PIXELS, CELL_PIXELS);
+              ctx.strokeStyle = "#cbd5e1";
+              ctx.strokeRect(px, py, CELL_PIXELS, CELL_PIXELS);
+            }
+
+            // If hazard flagged on explored map
+            if (explored === M_HAZARD) {
+              ctx.fillStyle = "rgba(245, 158, 11, 0.4)";
+              ctx.fillRect(px, py, CELL_PIXELS, CELL_PIXELS);
+            }
+          }
+        }
+      }
+
+      // Draw Robot Trails
+      sim.robots.forEach(r => {
+        if (r.trail.length > 1) {
+          ctx.strokeStyle = r.color;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          r.trail.forEach((pt, idx) => {
+            const tx = pt.x * CELL_PIXELS + CELL_PIXELS / 2;
+            const ty = pt.y * CELL_PIXELS + CELL_PIXELS / 2;
+            if (idx === 0) ctx.moveTo(tx, ty);
+            else ctx.lineTo(tx, ty);
+          });
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        }
+      });
+
+      // Draw Robots & Sensing cones
+      sim.robots.forEach((r, idx) => {
+        const cx = r.x * CELL_PIXELS + CELL_PIXELS / 2;
+        const cy = r.y * CELL_PIXELS + CELL_PIXELS / 2;
+
+        // Sensor footprint
+        ctx.beginPath();
+        ctx.arc(cx, cy, sim.sensorRange * CELL_PIXELS, 0, Math.PI * 2);
+        ctx.fillStyle = r.color;
+        ctx.globalAlpha = 0.12;
+        ctx.fill();
+        ctx.strokeStyle = r.color;
+        ctx.globalAlpha = 0.4;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1.0;
+
+        // Robot Body
+        ctx.beginPath();
+        ctx.arc(cx, cy, CELL_PIXELS * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = r.color;
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Robot number
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(idx + 1, cx, cy);
+      });
+
+      updateHUD();
+    }
+
+    let frameCount = 0;
+    function loop() {
+      if (isRunning) {
+        frameCount++;
+        const stepRate = speed === 5 ? 1 : (6 - speed) * 3;
+        if (frameCount % stepRate === 0) {
+          sim.step(algoSelect.value);
+        }
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // Start loop
+    draw();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
